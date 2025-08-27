@@ -1,9 +1,11 @@
-import * as React from 'react';
+import React, { useEffect } from 'react';
+import 'react-native-get-random-values';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './screens/HomeScreen';
 import AddScreen from './screens/AddScreen';
 import DetailScreen from './screens/DetailScreen';
+import { ensureGuestId } from './utils/musicStorage';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -14,6 +16,9 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
+  React.useEffect(() => {
+    ensureGuestId().catch(console.error);
+  }, []);
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Home">

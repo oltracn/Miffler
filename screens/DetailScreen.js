@@ -1,35 +1,96 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, Linking, Button, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, StyleSheet, ScrollView, Linking, Button, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { BASE_API_URL } from '@env';
 
 export default function DetailScreen({ route, navigation }) {
-  const { musicInfo, url, title: paramTitle } = route.params;
-  const results = Array.isArray(musicInfo.results) ? musicInfo.results : [];
-  // 优先从 musicInfo.title 获取页面标题
-  const pageTitle = (musicInfo && musicInfo.title) || paramTitle || url;
+  const { musicInfo: initialMusicInfo, url: paramUrl, title: paramTitle, id } = route.params || {};
+  // keep musicInfo null initially so we can normalize any incoming initialMusicInfo shape
+  const [musicInfo, setMusicInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // 控制台打印API返回的结果
-  console.log('API返回的musicInfo:', musicInfo);
+  const fetchEventById = async () => {
+    if (!id) return;
+    setError(null);
+    try {
+      setLoading(true);
+      if (!BASE_API_URL) {
+        const msg = 'BASE_API_URL not configured in .env';
+        console.warn(msg);
+        setError(msg);
+        return;
+      }
+      const res = await fetch(`${BASE_API_URL}/api/guest/fetches?fetchId=${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        const msg = `fetch event failed: ${res.status}`;
+        console.warn(msg);
+        setError(msg);
+        setMusicInfo(null);
+        return;
+      }
+      const body = await res.json();
+      const ev = Array.isArray(body.events) && body.events.length > 0 ? body.events[0] : null;
+      if (ev) {
+        const results = (ev.music_items || []).map((it) => ({
+          song: it.song || null,
+          artist: it.artist || null,
+          album: it.album || null,
+          coverUrl: it.cover_url || it.coverUrl || (it.spotify && (it.spotify.coverUrl || it.spotify.cover_url)) || null,
+          spotifyUrl: it.spotify_url || it.spotifyUrl || (it.spotify && (it.spotify.url || it.spotifyUrl)) || null,
+          meta: it.meta || null,
+        }));
+        setMusicInfo({ results, title: ev.title || paramTitle, url: ev.url || paramUrl, raw: ev });
+      } else {
+        setError('未找到该抓取记录');
+      }
+    } catch (e) {
+      console.error('failed to load event by id', e);
+      setError(e.message || '网络错误');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Detail now always loads the canonical event from backend by id
+  useEffect(() => {
+    // whenever id changes, reload from backend
+    setMusicInfo(null);
+    if (id) fetchEventById();
+  }, [id]);
+
+  useEffect(() => {
+    if (!musicInfo && id) fetchEventById();
+  }, [id, musicInfo]);
+
+  const results = Array.isArray(musicInfo?.results) ? musicInfo.results : [];
+  const pageTitle = (musicInfo && musicInfo.title) || paramTitle || paramUrl;
+  const pageUrl = (musicInfo && musicInfo.url) || paramUrl || '';
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* 优化后的原始链接展示，带背景区块 */}
       <View style={styles.linkBlock}>
-        <TouchableOpacity onPress={() => Linking.openURL(url)}>
+        <TouchableOpacity onPress={() => pageUrl && Linking.openURL(pageUrl)}>
           <Text style={styles.linkTitle} numberOfLines={2}>
             {pageTitle}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {results.length === 0 && (
+      {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
+      {!loading && results.length === 0 && !error && (
         <Text style={{ marginTop: 20 }}>未识别到音乐信息</Text>
       )}
 
+      {error && (
+        <View style={{ marginTop: 16, alignItems: 'center' }}>
+          <Text style={{ color: 'red', marginBottom: 8 }}>{error}</Text>
+          <Button title="重试" onPress={() => fetchEventById()} />
+        </View>
+      )}
+
       {results.map((item, idx) => {
-        const { song, artist, album, spotify } = item;
-        const coverUrl = spotify && spotify.coverUrl ? spotify.coverUrl : '';
-        const spotifyUrl = spotify && spotify.spotifyUrl ? spotify.spotifyUrl : '';
-        const albumName = album || (spotify && spotify.album) || '';
+        const { song, artist, album, coverUrl, spotifyUrl } = item;
+        const albumName = album || '';
 
         return (
           <View key={idx} style={styles.musicCard}>
@@ -61,12 +122,6 @@ export default function DetailScreen({ route, navigation }) {
           </View>
         );
       })}
-
-      {/* 原始数据展示，便于调试 */}
-      <View style={styles.rawBlock}>
-        <Text style={styles.rawLabel}>API返回原始数据：</Text>
-        <Text style={styles.rawText}>{JSON.stringify(musicInfo, null, 2)}</Text>
-      </View>
 
       <View style={{ marginTop: 32 }}>
         <Button title="返回首页" onPress={() => navigation.popToTop()} />
@@ -141,7 +196,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  rawBlock: { width: '100%', marginTop: 24, backgroundColor: '#f7f7f7', borderRadius: 8, padding: 12 },
-  rawLabel: { fontWeight: 'bold', marginBottom: 4 },
-  rawText: { fontSize: 13, color: '#333', fontFamily: 'monospace' },
 });
