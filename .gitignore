@@ -35,5 +35,8 @@ yarn-error.*
 .env.local
 .env*.local
 
+supabaseClient.js
+android/
+
 # typescript
 *.tsbuildinfo
