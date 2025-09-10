@@ -56,9 +56,10 @@ export async function saveMusicInfo(payload = {}) {
     meta: payload.meta || { raw: payload },
   };
 
-  const body = { guestId, event, items: records };
 
-  const res = await fetch(`${BASE_API_URL}/api/guest/fetch`, {
+  // 新 RESTful 路径，guestId 作为 actor 传递
+  const body = { actor: { type: 'guest', id: guestId }, event, items: records };
+  const res = await fetch(`${BASE_API_URL}/api/sniffs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -73,14 +74,14 @@ export async function saveMusicInfo(payload = {}) {
 }
 
 // 查询当前设备（guestId）的抓取历史
-// 仅支持新版后端返回格式：{ events: [ { id, guest_id, url, title, fetched_at, meta, music_items: [...] }, ... ] }
+// 仅支持新版后端返回格式：{ events: [ { id, guest_id, url, title, fetched_at, meta, musics: [...] }, ... ] }
 // 返回值为 events 数组，若无数据或格式不符则返回 []
 export async function getMyMusicHistory() {
   const guestId = await AsyncStorage.getItem('guestId');
   if (!guestId) return [];
 
   if (!BASE_API_URL) throw new Error('BASE_API_URL not configured in .env');
-  const res = await fetch(`${BASE_API_URL}/api/guest/fetches?guestId=${encodeURIComponent(guestId)}`);
+  const res = await fetch(`${BASE_API_URL}/api/sniffs?guestId=${encodeURIComponent(guestId)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `查询失败: ${res.status}`);
@@ -88,8 +89,8 @@ export async function getMyMusicHistory() {
 
   const body = await res.json().catch(() => ({}));
 
-  // 仅接受新版接口返回 { events: [...] }
-  if (Array.isArray(body.events)) return body.events;
+  // 后端返回数组
+  if (Array.isArray(body)) return body;
 
   // 其他格式视为无数据
   return [];

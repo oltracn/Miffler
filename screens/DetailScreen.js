@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, Linking, Button, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, Image, StyleSheet, Linking, Button, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
 import { BASE_API_URL } from '@env';
 
 export default function DetailScreen({ route, navigation }) {
@@ -20,7 +20,8 @@ export default function DetailScreen({ route, navigation }) {
         setError(msg);
         return;
       }
-      const res = await fetch(`${BASE_API_URL}/api/guest/fetches?fetchId=${encodeURIComponent(id)}`);
+  // 新 RESTful 路径，直接用 /api/sniffs/:id
+  const res = await fetch(`${BASE_API_URL}/api/sniffs/${encodeURIComponent(id)}`);
       if (!res.ok) {
         const msg = `fetch event failed: ${res.status}`;
         console.warn(msg);
@@ -29,9 +30,9 @@ export default function DetailScreen({ route, navigation }) {
         return;
       }
       const body = await res.json();
-      const ev = Array.isArray(body.events) && body.events.length > 0 ? body.events[0] : null;
+      const ev = body; // 后端返回单个 sniff 对象
       if (ev) {
-        const results = (ev.music_items || []).map((it) => ({
+        const results = (ev.musics || []).map((it) => ({
           song: it.song || null,
           artist: it.artist || null,
           album: it.album || null,
@@ -39,7 +40,7 @@ export default function DetailScreen({ route, navigation }) {
           spotifyUrl: it.spotify_url || it.spotifyUrl || (it.spotify && (it.spotify.url || it.spotifyUrl)) || null,
           meta: it.meta || null,
         }));
-        setMusicInfo({ results, title: ev.title || paramTitle, url: ev.url || paramUrl, raw: ev });
+        setMusicInfo({ results, title: ev.title || ev.urls?.title || paramTitle, url: ev.urls?.url || paramUrl, raw: ev });
       } else {
         setError('未找到该抓取记录');
       }
@@ -67,71 +68,82 @@ export default function DetailScreen({ route, navigation }) {
   const pageUrl = (musicInfo && musicInfo.url) || paramUrl || '';
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.linkBlock}>
-        <TouchableOpacity onPress={() => pageUrl && Linking.openURL(pageUrl)}>
-          <Text style={styles.linkTitle} numberOfLines={2}>
-            {pageTitle}
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      <FlatList
+        data={results}
+        keyExtractor={(item, idx) => idx.toString()}
+        ListHeaderComponent={() => (
+          <>
+            <View style={styles.linkBlock}>
+              <TouchableOpacity onPress={() => pageUrl && Linking.openURL(pageUrl)}>
+                <Text style={styles.linkTitle} numberOfLines={2}>
+                  {pageTitle}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-      {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
-      {!loading && results.length === 0 && !error && (
-        <Text style={{ marginTop: 20 }}>未识别到音乐信息</Text>
-      )}
+            {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
+            {!loading && results.length === 0 && !error && (
+              <Text style={{ marginTop: 20 }}>未识别到音乐信息</Text>
+            )}
 
-      {error && (
-        <View style={{ marginTop: 16, alignItems: 'center' }}>
-          <Text style={{ color: 'red', marginBottom: 8 }}>{error}</Text>
-          <Button title="重试" onPress={() => fetchEventById()} />
-        </View>
-      )}
-
-      {results.map((item, idx) => {
-        const { song, artist, album, coverUrl, spotifyUrl } = item;
-        const albumName = album || '';
-
-        return (
-          <View key={idx} style={styles.musicCard}>
-            {coverUrl ? (
-              <Image
-                source={{ uri: coverUrl }}
-                style={styles.musicCoverLarge}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.musicCoverLarge, { backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: '#aaa', fontSize: 14 }}>无封面</Text>
+            {error && (
+              <View style={{ marginTop: 16, alignItems: 'center' }}>
+                <Text style={{ color: 'red', marginBottom: 8 }}>{error}</Text>
+                <Button title="重试" onPress={() => fetchEventById()} />
               </View>
             )}
-            <View style={styles.musicInfo}>
-              <Text style={styles.songName} numberOfLines={1}>{song || '未知歌曲'}</Text>
-              <Text style={styles.artistName} numberOfLines={1}>{artist || '未知艺人'}</Text>
-              <Text style={styles.albumName} numberOfLines={1}>{albumName ? albumName : '未知专辑'}</Text>
-              {spotifyUrl ? (
-                <TouchableOpacity
-                  style={styles.spotifyBtn}
-                  onPress={() => Linking.openURL(spotifyUrl)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.spotifyBtnText}>去 Spotify 收听</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+          </>
+        )}
+        ListFooterComponent={() => (
+          <View style={{ marginTop: 32, marginBottom: 20 }}>
+            <Button title="返回首页" onPress={() => navigation.popToTop()} />
           </View>
-        );
-      })}
+        )}
+        renderItem={({ item }) => {
+          const { song, artist, album, coverUrl, spotifyUrl } = item;
+          const albumName = album || '';
 
-      <View style={{ marginTop: 32 }}>
-        <Button title="返回首页" onPress={() => navigation.popToTop()} />
-      </View>
-    </ScrollView>
+          return (
+            <View style={styles.musicCard}>
+              {coverUrl ? (
+                <Image
+                  source={{ uri: coverUrl }}
+                  style={styles.musicCoverLarge}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.musicCoverLarge, { backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Text style={{ color: '#aaa', fontSize: 14 }}>无封面</Text>
+                </View>
+              )}
+              <View style={styles.musicInfo}>
+                <Text style={styles.songName} numberOfLines={1}>{song || '未知歌曲'}</Text>
+                <Text style={styles.artistName} numberOfLines={1}>{artist || '未知艺人'}</Text>
+                <Text style={styles.albumName} numberOfLines={1}>{albumName ? albumName : '未知专辑'}</Text>
+                {spotifyUrl ? (
+                  <TouchableOpacity
+                    style={styles.spotifyBtn}
+                    onPress={() => Linking.openURL(spotifyUrl)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.spotifyBtnText}>去 Spotify 收听</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          );
+        }}
+        initialNumToRender={10}  // 初始渲染项数
+        maxToRenderPerBatch={10} // 每批渲染项数
+        windowSize={5}           // 视窗大小
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, alignItems: 'center', backgroundColor: '#fff' },
+  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
   linkBlock: {
     width: '100%',
     backgroundColor: '#f0f4fa',

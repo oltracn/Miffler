@@ -28,7 +28,12 @@ export default function HomeScreen({ navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={() => navigation.navigate('Add')} style={{ marginRight: 12 }}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Add')}
+          style={{ marginRight: 12, padding: 8 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="添加项目"
+        >
           <Text style={{ fontSize: 22, color: '#007AFF' }}>+</Text>
         </TouchableOpacity>
       ),
@@ -41,17 +46,23 @@ export default function HomeScreen({ navigation }) {
         data={history}
         keyExtractor={item => item.id}
         renderItem={({ item }) => {
-          const title = item.title || item.url || '未知页面';
+          const title = item.title || item.urls?.title || item.url || '未知页面';
           const fetchedAt = item.fetched_at || item.created_at || null;
-          const musicItems = Array.isArray(item.music_items) ? item.music_items : [];
+          const musicItems = Array.isArray(item.musics) ? item.musics : [];
           const total = musicItems.length;
 
           const formattedTime = fetchedAt ? new Date(fetchedAt).toLocaleString() : '';
 
           return (
-            <TouchableOpacity onPress={() => navigation.navigate('Detail', { id: item.id })}>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Detail', { id: item.id })}
+              activeOpacity={1}
+            >
               <View style={styles.card}>
-                <TouchableOpacity onPress={() => item.url && Linking.openURL(item.url)} activeOpacity={0.7}>
+                <TouchableOpacity 
+                  onPress={() => (item.urls?.url || item.url) && Linking.openURL(item.urls?.url || item.url)} 
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.title}>{title}</Text>
                 </TouchableOpacity>
                 <Text style={styles.meta}>{formattedTime} · {total} 首</Text>
@@ -67,7 +78,10 @@ export default function HomeScreen({ navigation }) {
                       );
                     })}
                     {total > 10 && (
-                      <TouchableOpacity onPress={() => navigation.navigate('Detail', { id: item.id })}>
+                      <TouchableOpacity 
+                        onPress={() => navigation.navigate('Detail', { id: item.id })}
+                        activeOpacity={1}
+                      >
                         <Text style={styles.more}>...还有 {total - 10} 首，查看详情</Text>
                       </TouchableOpacity>
                     )}

@@ -15,7 +15,7 @@ export default function AddScreen({ navigation }) {
     setLoading(true);
     try {
       if (!BASE_API_URL) throw new Error('BASE_API_URL not configured in .env');
-      const response = await fetch(`${BASE_API_URL}/api/parse-music`, {
+      const response = await fetch(`${BASE_API_URL}/api/urls/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
