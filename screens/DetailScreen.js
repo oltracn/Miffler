@@ -161,9 +161,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 18,
     width: '100%',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0,0,0,0.04)',
     elevation: 2,
   },
   musicCoverLarge: {

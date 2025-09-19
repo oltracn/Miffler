@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './screens/HomeScreen';
 import AddScreen from './screens/AddScreen';
 import DetailScreen from './screens/DetailScreen';
-import { ensureGuestId } from './utils/musicStorage';
+import { getCurrentActor } from './utils/actor';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -17,7 +17,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   React.useEffect(() => {
-    ensureGuestId().catch(console.error);
+    getCurrentActor().catch(console.error);
   }, []);
   return (
     <NavigationContainer>
