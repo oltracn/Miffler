@@ -1,9 +1,11 @@
 import React, { useEffect, useLayoutEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking, Image } from 'react-native';
+import { useAuth } from '../authContext';
 import { getMyMusicHistory } from '../utils/musicStorage';
 
 export default function HomeScreen({ navigation }) {
   const [history, setHistory] = React.useState([]);
+  const { user } = useAuth();
 
   async function load() {
     try {
@@ -27,6 +29,31 @@ export default function HomeScreen({ navigation }) {
   // 将添加按钮移动到导航栏右侧（一个加号图标）
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        user ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 12 }}>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {user.picture ? (
+                <Image source={{ uri: user.picture }} style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }} />
+              ) : (
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', marginRight: 8 }}>
+                  <Text style={{ color: '#fff', fontSize: 14 }}>{(user.name||'U').slice(0,1).toUpperCase()}</Text>
+                </View>
+              )}
+              <Text numberOfLines={1} style={{ maxWidth: 120, fontSize: 15 }}>{user.name || '用户'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Login')}
+            style={{ marginLeft: 12, padding: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="登录"
+          >
+            <Text style={{ fontSize: 16, color: '#007AFF' }}>Login</Text>
+          </TouchableOpacity>
+        )
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={() => navigation.navigate('Add')}
@@ -37,8 +64,10 @@ export default function HomeScreen({ navigation }) {
           <Text style={{ fontSize: 22, color: '#007AFF' }}>+</Text>
         </TouchableOpacity>
       ),
+      title: '',
     });
-  }, [navigation]);
+  }, [navigation, user]);
+  console.log('HomeScreen render start');
   return (
     <View style={styles.container}>
       {/* 添加按钮已移动到顶部导航栏右侧 */}
