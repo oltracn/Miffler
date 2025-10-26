@@ -1,4 +1,3 @@
-import { getCurrentActor } from './actor';
 import { BASE_API_URL } from '@env';
 
 // 已由 actor.js 统一管理身份
@@ -27,8 +26,9 @@ function toItem(r) {
 
 // 保存一次抓取行为（fetch event）及其中的音乐条目（items）
 // 统一使用 actor（userId 或 guestId）
-export async function saveMusicInfo(payload = {}) {
-  const actor = await getCurrentActor();
+export async function saveMusicInfo(payload = {}, actor) {
+  if (!actor) throw new Error('saveMusicInfo 需要一个 actor 对象');
+
   const records = normalizeRecords(payload).map(toItem);
 
   if (records.length === 0) return { ok: false, reason: 'no_records' };
@@ -61,8 +61,9 @@ export async function saveMusicInfo(payload = {}) {
 
 // 查询当前身份（userId 或 guestId）的抓取历史
 // 返回值为 events 数组，若无数据或格式不符则返回 []
-export async function getMyMusicHistory() {
-  const actor = await getCurrentActor();
+export async function getMyMusicHistory(actor) {
+  if (!actor) return []; // 如果没有 actor，直接返回空数组
+
   if (!BASE_API_URL) throw new Error('BASE_API_URL not configured in .env');
   let url = `${BASE_API_URL}/api/sniffs?`;
   if (actor.type === 'user') {

@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Try to read BASE_API_URL from @env (Expo) or process.env as fallback
 let BASE_API_URL: string | undefined;
@@ -9,6 +12,14 @@ try {
   BASE_API_URL = require('@env').BASE_API_URL;
 } catch (_) {
   BASE_API_URL = (process.env.BASE_API_URL as string) || undefined;
+}
+
+const DEEP_LINK_PREFIX = 'miffler://';
+const OAUTH_CALLBACK_PATH = 'oauth-callback';
+
+export interface Actor {
+  type: 'user' | 'guest';
+  id: string;
 }
 
 export interface AuthUser {
@@ -20,7 +31,10 @@ export interface AuthUser {
 interface AuthContextValue {
   session: Session | null;
   user: AuthUser | null;
+  actor: Actor | null;
+  loadingAuth: boolean;
   signOut: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   apiFetch: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 }
 
@@ -28,18 +42,77 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [actor, setActor] = useState<Actor | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  // Helper to get or create a guest ID
+  const getOrCreateGuestId = async (): Promise<string> => {
+    let guestId = await AsyncStorage.getItem('guestId');
+    if (!guestId) {
+      // Assuming 'react-native-get-random-values' is installed for uuid
+      const { v4: uuidv4 } = require('uuid');
+      guestId = uuidv4();
+      await AsyncStorage.setItem('guestId', guestId);
+    }
+    return guestId;
+  };
 
   useEffect(() => {
-    // Immediately try to get the current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 使用 useRef 来跟踪登录意图，避免在每次 auth 状态变化时都尝试合并数据
+    const loginIntentRef = { isLoggingIn: false };
+
+    const handleAuthChange = async (event: string, session: Session | null) => {
       setSession(session);
-      setHydrated(true);
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, avatar_url')
+          .eq('id', session.user.id)
+          .single();
+
+        const authUser: AuthUser = {
+          id: session.user.id,
+          name: profile?.name || session.user.user_metadata?.full_name || session.user.email,
+          picture: profile?.avatar_url || session.user.user_metadata?.avatar_url,
+        };
+        setUser(authUser);
+        setActor({ type: 'user', id: session.user.id });
+
+        // --- 可靠的数据合并逻辑 ---
+        // 只有在用户刚刚登录 (SIGNED_IN) 并且我们记录了登录意图时才执行
+        const guestId = await AsyncStorage.getItem('guestId');
+        if (event === 'SIGNED_IN' && guestId && loginIntentRef.isLoggingIn) {
+          console.log(`[Auth] 用户登录成功，开始为新用户 ${session.user.id} 合并访客 ${guestId} 的数据...`);
+          loginIntentRef.isLoggingIn = false; // 重置意图
+          try {
+            await apiFetch('/users/claim-data', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ guestId }),
+            });
+            await AsyncStorage.removeItem('guestId'); // 合并成功后删除 guestId
+            console.log('[Auth] 数据合并成功，访客ID已清除。');
+          } catch (mergeError) {
+            console.error('[Auth] 数据合并请求失败', mergeError);
+          }
+        }
+      } else {
+        setUser(null);
+        const guestId = await getOrCreateGuestId();
+        setActor({ type: 'guest', id: guestId });
+      }
+      setLoadingAuth(false);
+    };
+
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleAuthChange('INITIAL_SESSION', session);
     });
 
     // Listen for changes in auth state (e.g., user signs in, signs out, or token is refreshed)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      handleAuthChange(event, session);
     });
 
     // Cleanup the subscription when the component unmounts
@@ -48,8 +121,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const loginWithGoogle = async () => {
+    setLoadingAuth(true);
+    try {
+      // 在启动 OAuth 流程前，记录下登录意图
+      const loginIntentRef = { isLoggingIn: true };
+
+      const redirectTo = Platform.OS === 'web'
+        ? window.location.origin
+        : `${DEEP_LINK_PREFIX}${OAUTH_CALLBACK_PATH}`;
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      });
+
+      if (error) throw error;
+
+      if (Platform.OS !== 'web') {
+        const authorizationUrl = data?.url;
+        if (!authorizationUrl) throw new Error('Supabase did not return an authorization URL.');
+
+        const result = await new Promise<{ type: string }>((resolve) => {
+          requestAnimationFrame(() => resolve(WebBrowser.openBrowserAsync(authorizationUrl)));
+        });
+
+        if (result.type === 'cancel') {
+          throw new Error('User canceled the authentication.');
+        }
+      }
+    } catch (e: any) {
+      console.error('[Auth] Login failed:', e);
+      throw e;
+    } finally {
+      setLoadingAuth(false);
+    }
+  };
+
   const signOut = async () => {
+    setLoadingAuth(true);
     await supabase.auth.signOut();
+    setLoadingAuth(false);
   };
 
   // Helper: build backend API URL
@@ -82,17 +194,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return fetch(requestUrl, cfg);
   }
 
-  // Derive user object from session
-  const user: AuthUser | null = session?.user ? {
-    id: session.user.id,
-    name: session.user.user_metadata?.full_name || session.user.user_metadata?.name,
-    picture: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
-  } : null;
-
-  if (!hydrated) return null; // could render splash screen
+  if (loadingAuth && !session) {
+    return null; // Or a splash screen
+  }
 
   return (
-    <AuthContext.Provider value={{ session, user, signOut, apiFetch }}>
+    <AuthContext.Provider value={{ session, user, actor, loadingAuth, signOut, loginWithGoogle, apiFetch }}>
       {children}
     </AuthContext.Provider>
   );

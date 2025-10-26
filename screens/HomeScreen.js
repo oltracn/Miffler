@@ -7,12 +7,13 @@ import { navigateToLogin } from '../utils/auth';
 
 export default function HomeScreen({ navigation }) {
   const [history, setHistory] = React.useState([]);
-  const { user, signOut } = useAuth();
+  const { user, actor, signOut } = useAuth(); // 获取 actor
   const route = useRoute();
 
   async function load() {
+    if (!actor) return; // 如果 actor 还没准备好，则不加载
     try {
-      const data = await getMyMusicHistory();
+      const data = await getMyMusicHistory(actor); // 传递 actor
       setHistory(data);
     } catch (e) {
       console.error(e);
@@ -27,7 +28,7 @@ export default function HomeScreen({ navigation }) {
       load();
     });
     return unsub;
-  }, [navigation]);
+  }, [navigation, actor]); // 将 actor 加入依赖项
 
   // 将添加按钮移动到导航栏右侧（一个加号图标）
   useLayoutEffect(() => {
