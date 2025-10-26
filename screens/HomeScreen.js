@@ -1,11 +1,14 @@
 import React, { useEffect, useLayoutEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking, Image } from 'react-native';
-import { useAuth } from '../authContext';
+import { useAuth } from '../src/contexts/authContext';
 import { getMyMusicHistory } from '../utils/musicStorage';
+import { useRoute } from '@react-navigation/native';
+import { navigateToLogin } from '../utils/auth';
 
 export default function HomeScreen({ navigation }) {
   const [history, setHistory] = React.useState([]);
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const route = useRoute();
 
   async function load() {
     try {
@@ -42,10 +45,13 @@ export default function HomeScreen({ navigation }) {
               )}
               <Text numberOfLines={1} style={{ maxWidth: 120, fontSize: 15 }}>{user.name || '用户'}</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={signOut} style={{ marginLeft: 16, padding: 4 }}>
+              <Text style={{ color: '#FF3B30' }}>退出</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigateToLogin(navigation, route)}
             style={{ marginLeft: 12, padding: 8 }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="登录"
@@ -66,7 +72,7 @@ export default function HomeScreen({ navigation }) {
       ),
       title: '',
     });
-  }, [navigation, user]);
+  }, [navigation, user, signOut, route]);
   console.log('HomeScreen render start');
   return (
     <View style={styles.container}>
